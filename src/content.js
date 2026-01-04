@@ -8,6 +8,7 @@ class YouTubeSpeedController {
         this.lastAppliedSpeed = null;
         this.checkInterval = null;
         this.videoElement = null;
+        this.lastUrl = window.location.href;
         this.init();
     }
 
@@ -60,6 +61,45 @@ class YouTubeSpeedController {
 
         // Apply speed once when video appears
         this.setupVideoObserver();
+        
+        // Listen for YouTube's SPA navigation (client-side routing)
+        this.setupNavigationListener();
+    }
+
+    setupNavigationListener() {
+        // Detect URL changes for YouTube's SPA navigation
+        const checkUrlChange = () => {
+            const currentUrl = window.location.href;
+            if (currentUrl !== this.lastUrl) {
+                this.lastUrl = currentUrl;
+                // Reset state and reapply speed for new video
+                this.lastAppliedSpeed = null;
+                // Wait a bit for YouTube to update the video element
+                setTimeout(() => this.applySpeed(), 100);
+            }
+        };
+
+        // Listen to history API changes (pushState/replaceState)
+        const originalPushState = history.pushState;
+        const originalReplaceState = history.replaceState;
+        
+        history.pushState = function(...args) {
+            originalPushState.apply(this, args);
+            checkUrlChange();
+        };
+        
+        history.replaceState = function(...args) {
+            originalReplaceState.apply(this, args);
+            checkUrlChange();
+        };
+
+        // Also listen to popstate for back/forward navigation
+        window.addEventListener('popstate', checkUrlChange);
+        
+        // YouTube sometimes uses yt-navigate events
+        document.addEventListener('yt-navigate-finish', () => {
+            checkUrlChange();
+        });
     }
 
     setupVideoObserver() {
