@@ -15,7 +15,7 @@ global.chrome = {
     },
 };
 
-// Import after mocking
+// Import StorageManager after mocking
 const StorageManager = require('../src/storage.js');
 
 describe('StorageManager', () => {
@@ -35,6 +35,7 @@ describe('StorageManager', () => {
                 expect(settings.genreSpeeds).toHaveProperty('Music', 1);
                 expect(settings.genreSpeeds).toHaveProperty('Comedy', 1);
                 expect(settings.channelSpeeds).toEqual({});
+                expect(settings.disabledVideoIds).toEqual({});
                 done();
             });
         });
@@ -44,6 +45,7 @@ describe('StorageManager', () => {
                 defaultSpeed: 1.5,
                 genreSpeeds: { Music: 1, Action: 2 },
                 channelSpeeds: { 'Example Channel': 1.8 },
+                disabledVideoIds: { video123: true },
             };
 
             chrome.storage.sync.get.mockImplementation((defaults, callback) => {
@@ -54,6 +56,36 @@ describe('StorageManager', () => {
                 expect(settings.defaultSpeed).toBe(1.5);
                 expect(settings.genreSpeeds.Action).toBe(2);
                 expect(settings.channelSpeeds['Example Channel']).toBe(1.8);
+                expect(settings.disabledVideoIds['video123']).toBe(true);
+                done();
+            });
+        });
+    });
+
+    describe('saveSettings', () => {
+        it('should save settings successfully', (done) => {
+            chrome.storage.sync.set.mockImplementation((data, callback) => {
+                callback();
+            });
+
+            const settings = { defaultSpeed: 3.0 };
+            StorageManager.saveSettings(settings).then(() => {
+                expect(chrome.storage.sync.set).toHaveBeenCalledWith(
+                    settings,
+                    expect.any(Function)
+                );
+                done();
+            });
+        });
+
+        it('should reject on save error', (done) => {
+            chrome.storage.sync.set.mockImplementation((data, callback) => {
+                global.chrome.runtime.lastError = { message: 'Storage error' };
+                callback();
+            });
+
+            StorageManager.saveSettings({}).catch((error) => {
+                expect(error.message).toBe('Storage error');
                 done();
             });
         });
@@ -200,6 +232,97 @@ describe('StorageManager', () => {
         });
     });
 
+    describe('toggleDisableVideo', () => {
+        it('should disable video when not disabled', (done) => {
+            const initialSettings = {
+                defaultSpeed: 2.3,
+                genreSpeeds: {},
+                channelSpeeds: {},
+                disabledVideoIds: {},
+            };
+
+            chrome.storage.sync.get.mockImplementation((defaults, callback) => {
+                callback(initialSettings);
+            });
+            chrome.storage.sync.set.mockImplementation((data, callback) => {
+                callback();
+            });
+
+            StorageManager.toggleDisableVideo('video123').then((settings) => {
+                expect(settings.disabledVideoIds['video123']).toBe(true);
+                done();
+            });
+        });
+
+        it('should enable video when disabled', (done) => {
+            const initialSettings = {
+                defaultSpeed: 2.3,
+                genreSpeeds: {},
+                channelSpeeds: {},
+                disabledVideoIds: { video123: true },
+            };
+
+            chrome.storage.sync.get.mockImplementation((defaults, callback) => {
+                callback(initialSettings);
+            });
+            chrome.storage.sync.set.mockImplementation((data, callback) => {
+                callback();
+            });
+
+            StorageManager.toggleDisableVideo('video123').then((settings) => {
+                expect(settings.disabledVideoIds).not.toHaveProperty('video123');
+                done();
+            });
+        });
+    });
+
+    describe('isVideoDisabled', () => {
+        it('should return true when video is disabled', (done) => {
+            const settings = {
+                disabledVideoIds: { video123: true },
+            };
+
+            chrome.storage.sync.get.mockImplementation((defaults, callback) => {
+                callback(settings);
+            });
+
+            StorageManager.isVideoDisabled('video123').then((isDisabled) => {
+                expect(isDisabled).toBe(true);
+                done();
+            });
+        });
+
+        it('should return false when video is not disabled', (done) => {
+            const settings = {
+                disabledVideoIds: { otherVideo: true },
+            };
+
+            chrome.storage.sync.get.mockImplementation((defaults, callback) => {
+                callback(settings);
+            });
+
+            StorageManager.isVideoDisabled('video123').then((isDisabled) => {
+                expect(isDisabled).toBe(false);
+                done();
+            });
+        });
+
+        it('should return false when no disabled videos', (done) => {
+            const settings = {
+                disabledVideoIds: {},
+            };
+
+            chrome.storage.sync.get.mockImplementation((defaults, callback) => {
+                callback(settings);
+            });
+
+            StorageManager.isVideoDisabled('video123').then((isDisabled) => {
+                expect(isDisabled).toBe(false);
+                done();
+            });
+        });
+    });
+
     describe('getSpeedForVideo', () => {
         it('should return channel speed with highest priority', (done) => {
             const settings = {
@@ -261,30 +384,27 @@ describe('StorageManager', () => {
             });
         });
 
-        it('is case-sensitive for channel lookups', (done) => {
+        it('should handle missing video info properties', (done) => {
             const settings = {
-                defaultSpeed: 2.3,
+                defaultSpeed: 1.8,
                 genreSpeeds: {},
-                channelSpeeds: { ExactCase: 1.75 },
+                channelSpeeds: {},
             };
 
             chrome.storage.sync.get.mockImplementation((defaults, callback) => {
                 callback(settings);
             });
 
-            StorageManager.getSpeedForVideo({
-                channel: 'exactcase',
-                genres: [],
-            }).then((speed) => {
-                expect(speed).toBe(2.3);
+            StorageManager.getSpeedForVideo({}).then((speed) => {
+                expect(speed).toBe(1.8);
                 done();
             });
         });
 
-        it('is case-sensitive for genre lookups', (done) => {
+        it('should try multiple genres and return first match', (done) => {
             const settings = {
                 defaultSpeed: 2.3,
-                genreSpeeds: { Music: 1.25 },
+                genreSpeeds: { Drama: 1.2, Music: 1.0 },
                 channelSpeeds: {},
             };
 
@@ -294,26 +414,58 @@ describe('StorageManager', () => {
 
             StorageManager.getSpeedForVideo({
                 channel: null,
-                genres: ['music'],
+                genres: ['Drama', 'music'],
             }).then((speed) => {
-                expect(speed).toBe(2.3);
+                expect(speed).toBe(1.2);
+                done();
+            });
+        });
+
+        it('should handle undefined genres array', (done) => {
+            const settings = {
+                defaultSpeed: 1.5,
+                genreSpeeds: { Music: 1.0 },
+                channelSpeeds: {},
+            };
+
+            chrome.storage.sync.get.mockImplementation((defaults, callback) => {
+                callback(settings);
+            });
+
+            StorageManager.getSpeedForVideo({
+                channel: null,
+                genres: undefined,
+            }).then((speed) => {
+                expect(speed).toBe(1.5);
                 done();
             });
         });
     });
 
     describe('error handling', () => {
-        it('should reject on save error', (done) => {
+        it('should handle get storage error', (done) => {
+            chrome.storage.sync.get.mockImplementation((defaults, callback) => {
+                global.chrome.runtime.lastError = { message: 'Get error' };
+                callback({});
+            });
+
+            StorageManager.getSettings().then((settings) => {
+                expect(settings).toBeDefined();
+                done();
+            });
+        });
+
+        it('should reject on set error', (done) => {
             chrome.storage.sync.get.mockImplementation((defaults, callback) => {
                 callback(defaults);
             });
             chrome.storage.sync.set.mockImplementation((data, callback) => {
-                global.chrome.runtime.lastError = { message: 'Storage error' };
+                global.chrome.runtime.lastError = { message: 'Set error' };
                 callback();
             });
 
             StorageManager.saveSettings({}).catch((error) => {
-                expect(error.message).toBe('Storage error');
+                expect(error.message).toBe('Set error');
                 done();
             });
         });

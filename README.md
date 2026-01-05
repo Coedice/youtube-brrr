@@ -76,11 +76,11 @@ The extension applies speeds in this order:
 
 ## Available Commands
 
-| Command | Purpose |
-| ------- | ------- |
-| `make install` | Install dependencies |
-| `make test` | Run unit tests with coverage |
-| `make lint` | Run linter |
-| `make format` | Format code with Prettier |
-| `make clean` | Clean build artifacts |
-| `make help` | Show help |
+| Command        | Purpose                      |
+| -------------- | ---------------------------- |
+| `make install` | Install dependencies         |
+| `make test`    | Run unit tests with coverage |
+| `make lint`    | Run linter                   |
+| `make format`  | Format code with Prettier    |
+| `make clean`   | Clean build artifacts        |
+| `make help`    | Show help                    |

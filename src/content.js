@@ -61,7 +61,7 @@ class YouTubeSpeedController {
 
         // Apply speed once when video appears
         this.setupVideoObserver();
-        
+
         // Listen for YouTube's SPA navigation (client-side routing)
         this.setupNavigationListener();
     }
@@ -82,20 +82,20 @@ class YouTubeSpeedController {
         // Listen to history API changes (pushState/replaceState)
         const originalPushState = history.pushState;
         const originalReplaceState = history.replaceState;
-        
-        history.pushState = function(...args) {
+
+        history.pushState = function (...args) {
             originalPushState.apply(this, args);
             checkUrlChange();
         };
-        
-        history.replaceState = function(...args) {
+
+        history.replaceState = function (...args) {
             originalReplaceState.apply(this, args);
             checkUrlChange();
         };
 
         // Also listen to popstate for back/forward navigation
         window.addEventListener('popstate', checkUrlChange);
-        
+
         // YouTube sometimes uses yt-navigate events
         document.addEventListener('yt-navigate-finish', () => {
             checkUrlChange();
@@ -405,7 +405,9 @@ class YouTubeSpeedController {
             try {
                 // Check if chrome.storage is available before attempting to use it
                 if (!chrome?.storage?.sync) {
-                    console.warn('YouTube Go Brrr: chrome.storage unavailable, using default speed');
+                    console.warn(
+                        'YouTube Go Brrr: chrome.storage unavailable, using default speed'
+                    );
                     resolve(2.3);
                     return;
                 }
